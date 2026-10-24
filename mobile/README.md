@@ -11,6 +11,16 @@ npm install
 npx expo start
 ```
 
+To test the app in a desktop browser, make sure the backend is running on the
+same PC and start the web target:
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3000 npx expo start --web
+```
+
+The web version keeps the session token in memory only. Reloading the page signs
+you out; Android and iOS continue to use Expo SecureStore.
+
 Set `EXPO_PUBLIC_API_BASE_URL` to the backend URL reachable from the device.
 The app defaults to `http://localhost:3000`, which is suitable for a simulator
 or device running on the same host network configuration:

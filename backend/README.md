@@ -44,6 +44,56 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Deploy to Render
+
+The repository root contains a `render.yaml` Blueprint for the API. It sets
+`backend/` as the service root, installs from `package-lock.json`, builds the
+NestJS app, and starts the compiled production entry point. To configure an
+existing Render web service manually, set:
+
+- **Root Directory:** `backend`
+- **Build Command:** `npm ci --include=dev && npm run build`
+- **Start Command:** `npm run start:prod`
+
+Set `MONGO_URI` to a reachable MongoDB connection string in Render's environment
+settings. The local backend also accepts the older `MONGODB_URI` name, but
+`MONGO_URI` is preferred and required in production. Never commit either URI.
+For MongoDB Atlas, use the `viatech` database path and give the database user
+read/write access to that database. Configure Atlas Network Access to permit the
+Render service's outbound connection.
+Set `JWT_SECRET` to a long random value, or let the Blueprint generate one.
+Render provides `PORT`; the API listens on that port automatically. The root
+route (`/`) returns a small health response for Render's health check. Optionally
+set `CORS_ORIGINS` to a comma-separated list of allowed frontend origins.
+
+The MongoDB account in the connection string is separate from a Viatech
+application login. A new live database does not automatically include users or
+business data from your local MongoDB database. Existing records must be migrated
+to the live database, or a new application account must be created there.
+
+For a deployed Next.js frontend, set `NEXT_PUBLIC_API_BASE_URL` to the Render
+service's public HTTPS URL (for example, `https://viatech-api.onrender.com`)
+before building/deploying the frontend. The app embeds this public setting at
+build time, so redeploy the frontend after changing it.
+
+For a fresh database, create its first admin once from the backend directory
+after setting `MONGO_URI` to the Render database connection string:
+
+```bash
+read -r -p "Admin name: " ADMIN_NAME
+read -r -p "Admin username: " ADMIN_USERNAME
+read -r -p "Admin email: " ADMIN_EMAIL
+read -r -s -p "Admin password (12+ characters): " ADMIN_PASSWORD
+printf '\n'
+export ADMIN_NAME ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
+npm run admin:create
+unset ADMIN_NAME ADMIN_USERNAME ADMIN_EMAIL ADMIN_PASSWORD
+```
+
+Run this in the Render Shell, or in a trusted terminal connected to the live
+database. The command refuses to operate on a database other than `viatech` and
+refuses to create another admin if one already exists.
+
 ## Run tests
 
 ```bash

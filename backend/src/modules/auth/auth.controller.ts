@@ -10,6 +10,7 @@ export class AuthController {
 
   @Post('register')
   register(@Body() registerDto: RegisterUserDto) {
+    registerDto.role = 'staff';
     return this.authService.register(registerDto);
   }
 

@@ -18,6 +18,9 @@ npm run start:dev
 
 The backend reads its configuration from `backend/.env`. Keep this local file
 private; use `backend/.env.example` as the template for another environment.
+For Render deployment settings, see [backend/README.md](./backend/README.md#deploy-to-render)
+or use the repository's `render.yaml` Blueprint. Configure the deployed
+frontend's `NEXT_PUBLIC_API_BASE_URL` to the Render API URL before its build.
 
 ## Run the frontend
 

@@ -32,7 +32,7 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
     const createdUser = new this.userModel({
-      ...registerDto,
+      name: registerDto.name,
       email: registerDto.email.trim().toLowerCase(),
       username: registerDto.username.trim(),
       password: hashedPassword,
