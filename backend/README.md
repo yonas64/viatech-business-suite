@@ -52,7 +52,7 @@ NestJS app, and starts the compiled production entry point. To configure an
 existing Render web service manually, set:
 
 - **Root Directory:** `backend`
-- **Build Command:** `npm ci --include=dev && npm run build`
+- **Build Command:** `npm ci --include=dev && npm run build && test -f dist/main.js`
 - **Start Command:** `npm run start:prod`
 
 Set `MONGO_URI` to a reachable MongoDB connection string in Render's environment
