@@ -11,26 +11,27 @@ npm install
 npx expo start
 ```
 
-To test the app in a desktop browser, make sure the backend is running on the
-same PC and start the web target:
+To test the app in a desktop browser, start the web target. Set
+`EXPO_PUBLIC_API_BASE_URL` in `mobile/.env` to the API URL you want to use; the
+checked-in example points to the Render API:
 
 ```bash
-EXPO_PUBLIC_API_BASE_URL=http://localhost:3000 npx expo start --web
+npx expo start --web
 ```
 
 The web version keeps the session token in memory only. Reloading the page signs
 you out; Android and iOS continue to use Expo SecureStore.
 
-Set `EXPO_PUBLIC_API_BASE_URL` to the backend URL reachable from the device.
-The app defaults to `http://localhost:3000`, which is suitable for a simulator
-or device running on the same host network configuration:
+Expo loads `EXPO_PUBLIC_API_BASE_URL` from `mobile/.env`. The app defaults to
+`http://localhost:3000` if it is not set, which is suitable for a simulator or
+device running on the same host network configuration:
 
 - Physical iOS/Android device: use the computer's LAN IP, for example
   `http://192.168.1.20:3000`.
 - Android emulator: use `http://10.0.2.2:3000`.
 - iOS simulator: `http://localhost:3000` usually reaches the host computer.
 
-For example, create a local `.env` file in `mobile/`:
+To use a local backend instead, update `mobile/.env` with its reachable address:
 
 ```dotenv
 EXPO_PUBLIC_API_BASE_URL=http://192.168.1.20:3000

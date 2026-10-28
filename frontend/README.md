@@ -4,14 +4,21 @@ The Next.js app provides an authenticated workspace for the Viatech NestJS API.
 
 ## Run locally
 
-Start the backend API, then run the frontend:
+Set `NEXT_PUBLIC_API_BASE_URL` in `.env.local` to the deployed API URL when
+using Render, or start the backend locally before starting the frontend:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://your-api-service.onrender.com
+```
+
+Then run the frontend:
 
 ```bash
 npm run dev
 ```
 
-By default, the frontend calls `http://localhost:3000`. Set
-`NEXT_PUBLIC_API_BASE_URL` if the API runs elsewhere. Set
+Without that setting, the frontend calls `http://localhost:3000`. Restart the
+Next.js dev server after changing `.env.local`. Set
 `NEXT_PUBLIC_CURRENCY_CODE` to an ISO 4217 currency code (for example `KES` or
 `EUR`) to format financial values; it defaults to `USD`.
 
