@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Modal, Text, View } from 'react-native';
 import { apiRequest, jsonBody } from './api';
-import { money, shortDate, variantLabel } from './format';
+import { saleSkuLabel, shortDate, variantLabel } from './format';
 import type { Product, Sale, Variant } from './types';
-import { Button, Card, Empty, Field, Notice, Page, Row, SectionTitle, SelectField, Stat, colors } from './ui';
+import { Button, Card, Empty, Field, MoneyText, Notice, Page, Row, SectionTitle, SelectField, Stat, colors } from './ui';
 
 type CartItem = { productId: string; variantId: string; productName: string; variantName: string; price: number; vatRate: number; available: number; quantity: string };
 
@@ -45,6 +45,22 @@ export function SalesScreen() {
   const subtotal = cart.reduce((total, item) => total + item.price * Number(item.quantity || 0), 0);
   const vat = cart.reduce((total, item) => total + item.price * Number(item.quantity || 0) * item.vatRate, 0);
 
+  async function startNewSale() {
+    setBusy(true);
+    setError('');
+    try {
+      const currentProducts = await apiRequest<Product[]>('/products');
+      setProducts(currentProducts);
+      setCart([]);
+      setSelection('');
+      setEditor(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not refresh products before starting a sale.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function addLine() {
     const option = options.find((item) => item.key === selection);
     if (!option) { setError('Select an in-stock product variant first.'); return; }
@@ -72,6 +88,33 @@ export function SalesScreen() {
     setBusy(true);
     setError('');
     try {
+      const currentProducts = await apiRequest<Product[]>('/products');
+      setProducts(currentProducts);
+      let changedSinceSelection = false;
+      const currentCart = cart.map((item) => {
+        const product = currentProducts.find((entry) => entry._id === item.productId);
+        const variant = product?.variants.find((entry) => entry._id === item.variantId);
+        if (!product || !variant) {
+          throw new Error(`${item.productName} is no longer available. Remove it and select another product.`);
+        }
+        if (variant.quantity < Number(item.quantity)) {
+          throw new Error(`${variant.sku} now has only ${variant.quantity} available. Adjust the sale quantity.`);
+        }
+        if (variant.sellingPrice !== item.price || variant.quantity !== item.available) changedSinceSelection = true;
+        return {
+          ...item,
+          productName: product.name,
+          variantName: variantLabel(variant),
+          price: variant.sellingPrice,
+          vatRate: variant.vatRate ?? 0.15,
+          available: variant.quantity,
+        };
+      });
+      if (changedSinceSelection) {
+        setCart(currentCart);
+        setError('Product price or stock changed. Review the refreshed sale totals and submit again.');
+        return;
+      }
       await apiRequest('/sales', {
         method: 'POST',
         body: jsonBody({
@@ -89,17 +132,17 @@ export function SalesScreen() {
 
   return (
     <Page title="Sales" subtitle="Create sales and review recent transactions."
-      action={<Button title="+ New sale" onPress={() => { setEditor(true); setError(''); }} small />}>
+      action={<Button title={busy ? 'Refreshing…' : '+ New sale'} onPress={() => void startNewSale()} small disabled={busy} />}>
       {error ? <Notice>{error}</Notice> : null}
       <View style={{ flexDirection: 'row', gap: 9 }}>
         <Stat label="Transactions" value={loading ? '—' : String(sales.length)} />
-        <Stat label="Sales total" value={loading ? '—' : money(sales.reduce((sum, sale) => sum + sale.total, 0))} accent="#188b67" />
-        <Stat label="Pending" value={loading ? '—' : money(sales.filter((sale) => sale.paymentStatus === 'pending').reduce((sum, sale) => sum + sale.total, 0))} accent="#d88b35" />
+        <Stat label="Sales total" value={loading ? '—' : <MoneyText value={sales.reduce((sum, sale) => sum + sale.total, 0)} />} accent="#188b67" />
+        <Stat label="Pending" value={loading ? '—' : <MoneyText value={sales.filter((sale) => sale.paymentStatus === 'pending').reduce((sum, sale) => sum + sale.total, 0)} />} accent="#d88b35" />
       </View>
       <Card>
         <SectionTitle>Transaction history</SectionTitle>
         {loading ? <Empty>Loading sales…</Empty> : sales.length ? sales.map((sale) => (
-          <Row key={sale._id} title={sale.saleReference} detail={`${shortDate(sale.saleDate)} · ${sale.items.length} line(s) · ${sale.paymentMethod} · ${sale.paymentStatus}`} right={money(sale.total)} />
+          <Row key={sale._id} title={saleSkuLabel(sale, products)} detail={`${shortDate(sale.saleDate)} · ${sale.items.length} item(s) · ${sale.paymentMethod} · ${sale.paymentStatus}`} right={<MoneyText value={sale.total} />} />
         )) : <Empty>No sales have been recorded yet.</Empty>}
       </Card>
       <Modal visible={editor} animationType="slide" onRequestClose={() => setEditor(false)}>
@@ -114,7 +157,11 @@ export function SalesScreen() {
             <SectionTitle>Sale items ({cart.length})</SectionTitle>
             {cart.length ? cart.map((item, index) => (
               <View key={`${item.variantId}-${index}`} style={{ gap: 7, borderBottomWidth: 1, borderBottomColor: '#eef1f5', paddingBottom: 10 }}>
-                <Row title={item.productName} detail={`${item.variantName} · ${money(item.price)} each · ${item.available} available`} />
+                <Row title={item.productName} detail={`${item.variantName} · ${item.available} available`}>
+                  <Text style={{ color: colors.muted, fontSize: 10 }}>
+                    <MoneyText value={item.price} /> each
+                  </Text>
+                </Row>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <View style={{ flex: 1 }}><Field label="Quantity" value={item.quantity} onChangeText={(quantity) => setCart((current) => current.map((entry, at) => at === index ? { ...entry, quantity } : entry))} keyboardType="numeric" /></View>
                   <Button title="Remove" danger small onPress={() => setCart((current) => current.filter((_, at) => at !== index))} />
@@ -130,9 +177,9 @@ export function SalesScreen() {
             { label: 'Paid', value: 'paid' }, { label: 'Pending', value: 'pending' },
           ]} onChange={setPaymentStatus} />
           <Card>
-            <Row title="Subtotal" right={money(subtotal)} />
-            <Row title="Estimated VAT" right={money(vat)} />
-            <Row title="Total" right={money(subtotal + vat)} />
+            <Row title="Subtotal" right={<MoneyText value={subtotal} />} />
+            <Row title="Estimated VAT" right={<MoneyText value={vat} />} />
+            <Row title="Total" right={<MoneyText value={subtotal + vat} />} />
           </Card>
           <Button title={busy ? 'Recording…' : 'Complete sale'} onPress={() => void submitSale()} disabled={busy || cart.length === 0} />
           <Button title="Cancel" secondary onPress={() => setEditor(false)} />

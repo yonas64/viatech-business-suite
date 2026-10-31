@@ -52,6 +52,7 @@ export type Sale = {
   items: {
     productName: string;
     variantName: string;
+    sku?: string;
     quantity: number;
     total: number;
   }[];

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Alert, Linking, Modal, Text, View } from 'react-native';
 import { apiRequest, jsonBody } from './api';
-import { dateInputToday, money, shortDate } from './format';
+import { dateInputToday, shortDate } from './format';
 import type { Expense, FinanceSummary, PageResult } from './types';
-import { Button, Card, Empty, Field, Notice, Page, Row, SectionTitle, Stat, colors } from './ui';
+import { Button, Card, Empty, Field, MoneyText, Notice, Page, Row, SectionTitle, Stat, colors } from './ui';
 
 export function FinanceScreen({ onExpenses }: { onExpenses: () => void }) {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
@@ -42,23 +42,23 @@ export function FinanceScreen({ onExpenses }: { onExpenses: () => void }) {
         </View>
       </Card>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 9 }}>
-        <Stat label="Sales revenue" value={loading ? '—' : money(summary?.totalSales)} />
-        <Stat label="Collected" value={loading ? '—' : money(summary?.totalCollected)} accent="#188b67" />
-        <Stat label="Outstanding" value={loading ? '—' : money(summary?.totalDue)} accent="#d88b35" />
-        <Stat label="Estimated profit" value={loading ? '—' : money(summary?.estimatedProfit)} accent="#8067d7" />
+        <Stat label="Sales revenue" value={loading ? '—' : <MoneyText value={summary?.totalSales} />} />
+        <Stat label="Collected" value={loading ? '—' : <MoneyText value={summary?.totalCollected} />} accent="#188b67" />
+        <Stat label="Outstanding" value={loading ? '—' : <MoneyText value={summary?.totalDue} />} accent="#d88b35" />
+        <Stat label="Estimated profit" value={loading ? '—' : <MoneyText value={summary?.estimatedProfit} />} accent="#8067d7" />
       </View>
       <Card>
         <SectionTitle>Profit breakdown</SectionTitle>
-        <Row title="Sales before VAT" right={money(summary?.salesSubtotal)} />
-        <Row title="VAT collected" right={money(summary?.totalVat)} />
-        <Row title="Cost of goods sold" right={`− ${money(summary?.costOfGoodsSold)}`} />
-        <Row title="Operating expenses" right={`− ${money(summary?.expenses)}`} />
-        <Row title="Estimated profit" right={money(summary?.estimatedProfit)} />
+        <Row title="Sales before VAT" right={<MoneyText value={summary?.salesSubtotal} />} />
+        <Row title="VAT collected" right={<MoneyText value={summary?.totalVat} />} />
+        <Row title="Cost of goods sold" right={<Text>− <MoneyText value={summary?.costOfGoodsSold} /></Text>} />
+        <Row title="Operating expenses" right={<Text>− <MoneyText value={summary?.expenses} /></Text>} />
+        <Row title="Estimated profit" right={<MoneyText value={summary?.estimatedProfit} />} />
       </Card>
       <Card>
         <SectionTitle>Inventory value</SectionTitle>
-        <Row title="Current cost value" right={money(summary?.currentInventoryCost)} />
-        <Row title="Expected profit on stock" right={money(summary?.expectedProfit)} />
+        <Row title="Current cost value" right={<MoneyText value={summary?.currentInventoryCost} />} />
+        <Row title="Expected profit on stock" right={<MoneyText value={summary?.expectedProfit} />} />
       </Card>
       <Button title="Open expense register" secondary onPress={onExpenses} />
     </Page>
@@ -182,7 +182,7 @@ export function ExpensesScreen({ isAdmin }: { isAdmin: boolean }) {
       {error ? <Notice>{error}</Notice> : null}
       <View style={{ flexDirection: 'row', gap: 9 }}>
         <Stat label="Expenses" value={loading ? '—' : String(result?.total ?? 0)} />
-        <Stat label="Total amount" value={loading ? '—' : money(result?.amount)} accent="#d88b35" />
+        <Stat label="Total amount" value={loading ? '—' : <MoneyText value={result?.amount} />} accent="#d88b35" />
       </View>
       <Card>
         <SectionTitle>Filter expenses</SectionTitle>
@@ -201,7 +201,7 @@ export function ExpensesScreen({ isAdmin }: { isAdmin: boolean }) {
         <SectionTitle>Expense register</SectionTitle>
         {loading ? <Empty>Loading expenses…</Empty> : result?.items.length ? result.items.map((expense) => (
           <View key={expense._id} style={{ gap: 6, borderBottomWidth: 1, borderBottomColor: '#eef1f5', paddingBottom: 11 }}>
-            <Row title={expense.description} detail={`${expense.category} · ${shortDate(expense.expenseDate)}${expense.reference ? ` · Ref: ${expense.reference}` : ''}`} right={money(expense.amount)} />
+            <Row title={expense.description} detail={`${expense.category} · ${shortDate(expense.expenseDate)}${expense.reference ? ` · Ref: ${expense.reference}` : ''}`} right={<MoneyText value={expense.amount} />} />
             {expense.receiptUrl ? <Button title="Open receipt" secondary small onPress={() => {
               void Linking.openURL(expense.receiptUrl!).catch(() => setError('Unable to open this receipt link.'));
             }} /> : null}

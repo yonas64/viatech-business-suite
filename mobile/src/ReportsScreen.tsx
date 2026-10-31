@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import { apiRequest } from './api';
-import { money, shortDate, dateInputToday } from './format';
-import type { Category, Product, Report } from './types';
-import { Button, Card, Empty, Field, Notice, Page, Row, SectionTitle, SelectField, Stat } from './ui';
+import { saleSkuLabel, shortDate, dateInputToday } from './format';
+import type { Category, Product, Report, Sale } from './types';
+import { Button, Card, Empty, Field, MoneyText, Notice, Page, Row, SectionTitle, SelectField, Stat } from './ui';
 
 type Period = 'daily' | 'weekly' | 'monthly' | 'summary';
 
@@ -16,13 +16,22 @@ export function ReportsScreen() {
   const [productId, setProductId] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([apiRequest<Category[]>('/categories'), apiRequest<Product[]>('/products')])
-      .then(([categoryList, productList]) => { setCategories(categoryList); setProducts(productList); })
+    Promise.all([
+      apiRequest<Category[]>('/categories'),
+      apiRequest<Product[]>('/products'),
+      apiRequest<Sale[]>('/sales'),
+    ])
+      .then(([categoryList, productList, saleList]) => {
+        setCategories(categoryList);
+        setProducts(productList);
+        setSales(saleList);
+      })
       .catch((cause: Error) => setError(cause.message));
     const params = new URLSearchParams({ date: dateInputToday() });
     apiRequest<Report>(`/reports/monthly?${params}`)
@@ -82,20 +91,20 @@ export function ReportsScreen() {
       {report ? <>
         <Card><Row title="Period" detail={`${shortDate(report.period.from)} – ${shortDate(report.period.to)}`} /></Card>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 9 }}>
-          <Stat label="Sales total" value={loading ? '—' : money(report.total)} />
+          <Stat label="Sales total" value={loading ? '—' : <MoneyText value={report.total} />} />
           <Stat label="Units sold" value={loading ? '—' : String(report.productsSold)} accent="#8067d7" />
-          <Stat label="Estimated profit" value={loading ? '—' : money(report.estimatedProfit)} accent="#188b67" />
+          <Stat label="Estimated profit" value={loading ? '—' : <MoneyText value={report.estimatedProfit} />} accent="#188b67" />
           <Stat label="Current stock" value={loading ? '—' : String(report.currentStock)} accent="#d88b35" />
         </View>
         <Card>
           <SectionTitle>Sales breakdown</SectionTitle>
-          <Row title="Subtotal" right={money(report.salesSubtotal)} />
-          <Row title="VAT" right={money(report.vat)} />
-          <Row title="Collected" right={money(report.totalCollected)} />
-          <Row title="Pending" right={money(report.totalDue)} />
-          <Row title="Cost of goods sold" right={`− ${money(report.costOfGoodsSold)}`} />
-          <Row title="Expenses" right={`− ${money(report.expenses)}`} />
-          <Row title="Gross profit" right={money(report.grossProfit)} />
+          <Row title="Subtotal" right={<MoneyText value={report.salesSubtotal} />} />
+          <Row title="VAT" right={<MoneyText value={report.vat} />} />
+          <Row title="Collected" right={<MoneyText value={report.totalCollected} />} />
+          <Row title="Pending" right={<MoneyText value={report.totalDue} />} />
+          <Row title="Cost of goods sold" right={<Text>− <MoneyText value={report.costOfGoodsSold} /></Text>} />
+          <Row title="Expenses" right={<Text>− <MoneyText value={report.expenses} /></Text>} />
+          <Row title="Gross profit" right={<MoneyText value={report.grossProfit} />} />
         </Card>
         <Card>
           <SectionTitle>Best-selling products</SectionTitle>
@@ -111,9 +120,17 @@ export function ReportsScreen() {
         </Card>
         <Card>
           <SectionTitle>Recent sales</SectionTitle>
-          {report.recentSales.length ? report.recentSales.map((sale) => (
-            <Row key={sale.id} title={sale.saleReference} detail={`${shortDate(sale.saleDate)} · ${sale.paymentStatus}`} right={money(sale.total)} />
-          )) : <Empty>No sales in this period.</Empty>}
+          {report.recentSales.length ? report.recentSales.map((sale) => {
+            const transaction = sales.find((item) => item._id === sale.id);
+            return (
+              <Row
+                key={sale.id}
+                title={transaction ? saleSkuLabel(transaction, products) : 'SKU unavailable'}
+                detail={`${shortDate(sale.saleDate)} · ${sale.paymentStatus}`}
+                right={<MoneyText value={sale.total} />}
+              />
+            );
+          }) : <Empty>No sales in this period.</Empty>}
         </Card>
       </> : <Card><Empty>{loading ? 'Loading report…' : 'Run a report to see results.'}</Empty></Card>}
     </Page>

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, Text, View } from 'react-native';
 import { apiRequest, jsonBody } from './api';
-import { money, variantLabel } from './format';
+import { variantLabel } from './format';
 import type { Category, Product, SpecificationField, Variant } from './types';
-import { Button, Card, Empty, Field, Notice, Page, Row, SectionTitle, SelectField, colors, uiStyles } from './ui';
+import { Button, Card, Empty, Field, MoneyText, Notice, Page, Row, SectionTitle, SelectField, colors, uiStyles } from './ui';
 
 type VariantDraft = {
   id?: string;
@@ -50,12 +50,17 @@ export function ProductsScreen({ isAdmin }: { isAdmin: boolean }) {
   const [error, setError] = useState('');
   const [editor, setEditor] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [editingVariantId, setEditingVariantId] = useState('');
+  const [variantQuantity, setVariantQuantity] = useState('');
+  const [variantCost, setVariantCost] = useState('');
+  const [variantSellingPrice, setVariantSellingPrice] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [variants, setVariants] = useState<VariantDraft[]>([emptyVariant()]);
 
   async function load() {
+    setLoading(true);
     try {
       const [productList, categoryList] = await Promise.all([
         apiRequest<Product[]>('/products'),
@@ -64,8 +69,10 @@ export function ProductsScreen({ isAdmin }: { isAdmin: boolean }) {
       setProducts(productList);
       setCategories(categoryList);
       if (!categoryId && categoryList[0]) setCategoryId(categoryList[0]._id);
+      return productList;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load the product catalog.');
+      throw cause;
     } finally {
       setLoading(false);
     }
@@ -174,9 +181,23 @@ export function ProductsScreen({ isAdmin }: { isAdmin: boolean }) {
         });
         for (const variant of variants) {
           if (variant.id) {
+            const existing = editing.variants.find((item) => item._id === variant.id);
+            if (existing && existing.quantity !== Number(variant.quantity)) {
+              await apiRequest('/inventory/stock/adjust', {
+                method: 'POST',
+                body: jsonBody({
+                  productId: editing._id,
+                  variantId: variant.id,
+                  quantity: Number(variant.quantity),
+                  reason: 'Quantity updated from product editor',
+                }),
+              });
+            }
+            const { quantity: omittedQuantity, ...variantFields } = toVariantPayload(variant);
+            void omittedQuantity;
             await apiRequest(`/products/${editing._id}/variants/${variant.id}`, {
               method: 'PATCH',
-              body: jsonBody(toVariantPayload(variant)),
+              body: jsonBody(variantFields),
             });
           } else {
             await apiRequest(`/products/${editing._id}/variants`, {
@@ -191,12 +212,90 @@ export function ProductsScreen({ isAdmin }: { isAdmin: boolean }) {
             await apiRequest(`/products/${editing._id}/variants/${oldVariant._id}`, { method: 'DELETE' });
           }
         }
+        const persisted = await apiRequest<Product>(`/products/${editing._id}`);
+        const mismatch = variants.find((variant) => {
+          const expected = toVariantPayload(variant);
+          const saved = variant.id
+            ? persisted.variants.find((item) => item._id === variant.id)
+            : persisted.variants.find((item) => item.sku === expected.sku.toUpperCase());
+          return !saved ||
+            saved.quantity !== expected.quantity ||
+            saved.costPrice !== expected.costPrice ||
+            saved.sellingPrice !== expected.sellingPrice;
+        });
+        if (mismatch) {
+          throw new Error('The backend did not confirm the requested quantity and price values. Please retry and check the API deployment.');
+        }
+        setProducts((current) => current.map((item) => item._id === persisted._id ? persisted : item));
       }
       setEditor(false);
       setEditing(null);
       await load();
     } catch (cause) {
       setError(`${cause instanceof Error ? cause.message : 'Could not save product.'}${editing ? ' Changes are sent individually; review the product before retrying.' : ''}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startVariantEdit(variant: Variant) {
+    setEditingVariantId(variant._id);
+    setVariantQuantity(String(variant.quantity));
+    setVariantCost(String(variant.costPrice));
+    setVariantSellingPrice(String(variant.sellingPrice));
+    setError('');
+  }
+
+  async function saveVariantValues(product: Product, variant: Variant) {
+    const quantity = Number(variantQuantity);
+    const costPrice = Number(variantCost);
+    const sellingPrice = Number(variantSellingPrice);
+    if (
+      !Number.isFinite(quantity) || quantity < 0 ||
+      !Number.isFinite(costPrice) || costPrice < 0 ||
+      !Number.isFinite(sellingPrice) || sellingPrice < 0
+    ) {
+      setError('Quantity, cost, and selling price must be valid non-negative numbers.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    let quantityUpdated = false;
+    try {
+      if (quantity !== variant.quantity) {
+        await apiRequest('/inventory/stock/adjust', {
+          method: 'POST',
+          body: jsonBody({
+            productId: product._id,
+            variantId: variant._id,
+            quantity,
+            reason: 'Quantity updated from product variant editor',
+          }),
+        });
+        quantityUpdated = true;
+      }
+      await apiRequest(`/products/${product._id}/variants/${variant._id}`, {
+        method: 'PATCH',
+        body: jsonBody({ costPrice, sellingPrice }),
+      });
+      const persisted = await apiRequest<Product>(`/products/${product._id}`);
+      const savedVariant = persisted.variants.find((item) => item._id === variant._id);
+      if (
+        !savedVariant ||
+        savedVariant.quantity !== quantity ||
+        savedVariant.costPrice !== costPrice ||
+        savedVariant.sellingPrice !== sellingPrice
+      ) {
+        throw new Error('The backend did not confirm the updated quantity, cost, and selling price. Check that the backend deployment is current.');
+      }
+      setProducts((current) => current.map((item) => item._id === persisted._id ? persisted : item));
+      setEditingVariantId('');
+      await load();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not update variant values.';
+      setError(quantityUpdated
+        ? `Quantity was saved, but the cost update failed: ${message}`
+        : message);
     } finally {
       setBusy(false);
     }
@@ -215,7 +314,7 @@ export function ProductsScreen({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <Page title="Products" subtitle="Catalog, stock keeping units, and variants."
-      action={isAdmin ? <Button title="+ Add" onPress={openCreate} small /> : undefined}>
+      action={isAdmin ? <Button title="+ New product" onPress={openCreate} small /> : undefined}>
       {error ? <Notice>{error}</Notice> : null}
       {isAdmin ? <Field label="Search products" value={search} onChangeText={setSearch} placeholder="Name or SKU" /> : null}
       {loading ? <Card><Empty>Loading catalog…</Empty></Card> : filtered.length ? filtered.map((product) => (
@@ -231,9 +330,56 @@ export function ProductsScreen({ isAdmin }: { isAdmin: boolean }) {
           </View>
           <SectionTitle>Variants ({product.variants.length})</SectionTitle>
           {product.variants.map((variant) => (
-            <Row key={variant._id} title={variantLabel(variant)} detail={`${variant.sku} · ${variant.quantity} ${variant.unit ?? 'pcs'} · Cost ${money(variant.costPrice)}`} right={money(variant.sellingPrice)} />
+            <View key={variant._id}>
+              {isAdmin ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit quantity and cost for ${variant.sku}`}
+                  onPress={() => startVariantEdit(variant)}
+                >
+                  <Row
+                    title={variantLabel(variant)}
+                    detail={`${variant.sku} · ${variant.quantity} ${variant.unit ?? 'pcs'} · Tap to edit`}
+                    right={<MoneyText value={variant.sellingPrice} />}
+                  >
+                    <Text style={{ color: colors.muted, fontSize: 10 }}>
+                      Cost: <MoneyText value={variant.costPrice} />
+                    </Text>
+                  </Row>
+                </Pressable>
+              ) : (
+                <Row
+                  title={variantLabel(variant)}
+                  detail={`${variant.sku} · ${variant.quantity} ${variant.unit ?? 'pcs'}`}
+                  right={<MoneyText value={variant.sellingPrice} />}
+                >
+                  <Text style={{ color: colors.muted, fontSize: 10 }}>
+                    Cost: <MoneyText value={variant.costPrice} />
+                  </Text>
+                </Row>
+              )}
+              {isAdmin && editingVariantId === variant._id ? (
+                <View style={{ gap: 9, paddingVertical: 8 }}>
+                  <View style={{ flexDirection: 'row', gap: 9 }}>
+                    <Field label={`Quantity (${variant.unit ?? 'pcs'})`} value={variantQuantity} onChangeText={setVariantQuantity} keyboardType="decimal-pad" required />
+                    <Field label="Cost (ETB)" value={variantCost} onChangeText={setVariantCost} keyboardType="decimal-pad" required />
+                  </View>
+                  <Field
+                    label="Selling price (ETB)"
+                    value={variantSellingPrice}
+                    onChangeText={setVariantSellingPrice}
+                    keyboardType="decimal-pad"
+                    required
+                  />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Button title={busy ? 'Saving…' : 'Save values'} onPress={() => void saveVariantValues(product, variant)} small disabled={busy} />
+                    <Button title="Cancel" secondary small onPress={() => setEditingVariantId('')} disabled={busy} />
+                  </View>
+                </View>
+              ) : null}
+            </View>
           ))}
-          {isAdmin ? <View style={{ flexDirection: 'row', gap: 8 }}>
+          {isAdmin ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             <Button title="Edit" secondary small onPress={() => openEdit(product)} />
             <Button title="Archive" danger small onPress={() => archive(product)} />
           </View> : null}

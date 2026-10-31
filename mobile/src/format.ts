@@ -1,9 +1,24 @@
-export function money(value: number | undefined | null) {
-  return new Intl.NumberFormat('en', {
+import type { Product, Sale } from './types';
+
+export function moneyParts(value: number | undefined | null) {
+  const currency = 'ETB';
+  const parts = new Intl.NumberFormat('en', {
     style: 'currency',
-    currency: process.env.EXPO_PUBLIC_CURRENCY_CODE ?? 'USD',
+    currency,
     maximumFractionDigits: 2,
-  }).format(value ?? 0);
+  }).formatToParts(value ?? 0);
+  return {
+    amount: parts
+      .filter((part) => ['integer', 'group', 'decimal', 'fraction', 'minusSign'].includes(part.type))
+      .map((part) => part.value)
+      .join(''),
+    currency,
+  };
+}
+
+export function money(value: number | undefined | null) {
+  const { amount, currency } = moneyParts(value);
+  return `${amount} ${currency}`;
 }
 
 export function shortDate(value: string | Date | undefined) {
@@ -26,6 +41,17 @@ export function variantLabel(variant: {
     return `${key}: ${display}`;
   }).join(', ');
   return values || variant.sku;
+}
+
+export function saleSkuLabel(sale: Sale, products: Product[]) {
+  return sale.items.map((item) => {
+    let sku = item.sku;
+    if (!sku) {
+      const product = products.find((entry) => entry.name === item.productName);
+      sku = product?.variants.find((variant) => variantLabel(variant) === item.variantName)?.sku;
+    }
+    return `${sku || 'SKU unavailable'} × ${item.quantity}`;
+  }).join(', ');
 }
 
 export function dateInputToday() {

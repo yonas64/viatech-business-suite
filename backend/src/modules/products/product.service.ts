@@ -177,7 +177,14 @@ export class ProductsService {
     this.validateVariantSet(product.variants as unknown as ProductVariantDto[], category);
     await this.ensureSkusAvailable([variant.sku], product._id.toString());
     await this.saveWithDuplicateHandling(product);
-    return variant;
+    const savedProduct = await this.productModel.findById(productId).exec();
+    const savedVariant = savedProduct?.variants.find(
+      (item) => item._id?.toString() === variantId,
+    );
+    if (!savedVariant) {
+      throw new NotFoundException('Product variant not found after update');
+    }
+    return savedVariant;
   }
 
   async removeVariant(productId: string, variantId: string) {

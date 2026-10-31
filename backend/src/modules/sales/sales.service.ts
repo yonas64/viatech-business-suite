@@ -67,6 +67,7 @@ export class SalesService {
         category: product.category,
         variantId: variant._id?.toString() ?? item.variantId,
         variantName: formatVariantSpecification(variant),
+        sku: variant.sku,
         quantity: item.quantity,
         unitPrice,
         costPrice: variant.costPrice,

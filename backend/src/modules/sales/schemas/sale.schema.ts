@@ -20,6 +20,9 @@ export class SaleItem {
   @Prop({ required: true, trim: true })
   variantName: string;
 
+  @Prop({ required: true, trim: true })
+  sku: string;
+
   @Prop({ required: true, min: 1 })
   quantity: number;
 

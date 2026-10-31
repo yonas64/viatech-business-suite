@@ -1,13 +1,16 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, useRef, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { moneyParts } from './format';
 
 export const colors = {
   ink: '#192b42',
@@ -22,6 +25,8 @@ export const colors = {
   white: '#ffffff',
 };
 
+export const ScrollVisibilityContext = createContext<(offset: number) => void>(() => undefined);
+
 export function Page({
   title,
   subtitle,
@@ -33,11 +38,23 @@ export function Page({
   action?: ReactNode;
   children: ReactNode;
 }) {
+  const reportScroll = useContext(ScrollVisibilityContext);
+  const previousOffset = useRef(0);
+
+  function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const offset = Math.max(0, event.nativeEvent.contentOffset.y);
+    if (offset <= 8) reportScroll(0);
+    else if (Math.abs(offset - previousOffset.current) > 4) reportScroll(offset - previousOffset.current);
+    previousOffset.current = offset;
+  }
+
   return (
     <ScrollView
       style={styles.page}
       contentContainerStyle={styles.pageContent}
       keyboardShouldPersistTaps="handled"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       <View style={styles.pageHeading}>
         <View style={styles.headingText}>
@@ -185,8 +202,47 @@ export function SectionTitle({ children }: { children: ReactNode }) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
-export function Stat({ label, value, accent = colors.blue }: { label: string; value: string; accent?: string }) {
-  return <View style={styles.stat}><Text style={styles.statLabel}>{label}</Text><Text style={[styles.statValue, { color: accent }]}>{value}</Text></View>;
+export function MoneyText({
+  value,
+  amountStyle,
+  currencyStyle,
+}: {
+  value: number | undefined | null;
+  amountStyle?: object;
+  currencyStyle?: object;
+}) {
+  const parts = moneyParts(value);
+  return (
+    <Text>
+      <Text style={amountStyle}>{parts.amount}</Text>
+      <Text style={[styles.currencyCode, currencyStyle]}> {parts.currency}</Text>
+    </Text>
+  );
+}
+
+export function Stat({
+  label,
+  value,
+  accent = colors.blue,
+  onPress,
+}: {
+  label: string;
+  value: ReactNode;
+  accent?: string;
+  onPress?: () => void;
+}) {
+  const content = <><Text style={styles.statLabel}>{label}</Text><Text style={[styles.statValue, { color: accent }]}>{value}</Text></>;
+  if (!onPress) return <View style={styles.stat}>{content}</View>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${typeof value === 'string' || typeof value === 'number' ? value : 'Open details'}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.stat, pressed && styles.buttonPressed]}
+    >
+      {content}
+    </Pressable>
+  );
 }
 
 export function Row({
@@ -197,7 +253,7 @@ export function Row({
 }: {
   title: string;
   detail?: string;
-  right?: string;
+  right?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -207,7 +263,7 @@ export function Row({
         {detail ? <Text style={styles.rowDetail}>{detail}</Text> : null}
         {children}
       </View>
-      {right ? <Text style={styles.rowRight}>{right}</Text> : null}
+      {right ? <View style={styles.rowRight}>{typeof right === 'string' ? <Text style={styles.rowRightText}>{right}</Text> : right}</View> : null}
     </View>
   );
 }
@@ -252,7 +308,9 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, gap: 4 },
   rowTitle: { color: '#30445d', fontSize: 12, fontWeight: '700' },
   rowDetail: { color: '#8794a5', fontSize: 10, lineHeight: 15 },
-  rowRight: { color: '#30445d', fontSize: 11, fontWeight: '800' },
+  rowRight: { alignItems: 'flex-end' },
+  rowRightText: { color: '#30445d', fontSize: 11, fontWeight: '800' },
+  currencyCode: { fontSize: 9, color: colors.muted, fontWeight: '600' },
 });
 
 export const uiStyles = styles;

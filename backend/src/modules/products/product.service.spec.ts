@@ -19,7 +19,7 @@ describe('ProductsService', () => {
   } as unknown as CategoryDocument;
 
   let service: ProductsService;
-  let productModel: jest.Mock & { exists: jest.Mock };
+  let productModel: jest.Mock & { exists: jest.Mock; findById: jest.Mock };
   let saveProduct: jest.Mock;
   let categoryModel: { findById: jest.Mock };
 
@@ -48,7 +48,10 @@ describe('ProductsService', () => {
         ...data,
         save: saveProduct,
       })),
-      { exists: jest.fn().mockResolvedValue(null) },
+      {
+        exists: jest.fn().mockResolvedValue(null),
+        findById: jest.fn(),
+      },
     );
     categoryModel = {
       findById: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(category) }),
@@ -117,5 +120,36 @@ describe('ProductsService', () => {
 
     await expect(service.create(dto)).rejects.toBeInstanceOf(BadRequestException);
     expect(saveProduct).not.toHaveBeenCalled();
+  });
+
+  it('persists and returns updated variant quantity and cost', async () => {
+    const variantId = '64b000000000000000000002';
+    const variant = {
+      _id: { toString: () => variantId },
+      sku: 'MICA-3MM',
+      specifications: { thickness: 3 },
+      quantity: 12,
+      costPrice: 10,
+    };
+    const product = {
+      _id: { toString: () => '64b000000000000000000003' },
+      category: { toString: () => categoryId },
+      variants: [variant],
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    productModel.findById = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue(product),
+    });
+
+    const result = await service.updateVariant(
+      '64b000000000000000000003',
+      variantId,
+      { quantity: 24, costPrice: 18 },
+    );
+
+    expect(product.save).toHaveBeenCalledTimes(1);
+    expect(variant).toMatchObject({ quantity: 24, costPrice: 18 });
+    expect(result).toBe(variant);
+    expect(productModel.findById).toHaveBeenCalledTimes(2);
   });
 });

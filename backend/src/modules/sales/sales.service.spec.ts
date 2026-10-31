@@ -89,6 +89,7 @@ describe('SalesService', () => {
 
     expect(saleData.items).toEqual([
       expect.objectContaining({
+        sku: 'PSU-60W',
         quantity: 3,
         unitPrice: 10.1,
         subtotal: 30.3,
@@ -97,6 +98,7 @@ describe('SalesService', () => {
         total: 34.85,
       }),
       expect.objectContaining({
+        sku: 'PSU-100W',
         quantity: 2,
         unitPrice: 20,
         subtotal: 40,
